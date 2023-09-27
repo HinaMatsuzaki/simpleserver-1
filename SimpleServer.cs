@@ -29,7 +29,10 @@ interface IServlet {
 /// TODO: search for specific books by author or title or whatever
 /// </summary>
 class BookHandler : IServlet {
-    public void ProcessRequest(HttpListenerContext context) {
+
+    private List<Book> books;
+
+    public BookHandler() {
         // we want to use case-insensitive matching for the JSON properties
         // the json files use lowercae letters, but we want to use uppercase in our C# code
         var options = new JsonSerializerOptions
@@ -38,10 +41,19 @@ class BookHandler : IServlet {
         };
 
         string text = File.ReadAllText(@"json/books.json");
-        var books = JsonSerializer.Deserialize<List<Book>>(text, options);
+        books = JsonSerializer.Deserialize<List<Book>>(text, options);
+    }
+
+    public void ProcessRequest(HttpListenerContext context) {
+        // TODO: 2-d: show book number N
+        int bookNum = 0;
+        if (context.Request.QueryString.AllKeys.Contains("n"))
+        {
+            bookNum = Int32.Parse(context.Request.QueryString["n"]);
+        }
 
         // grab a random book
-        Book book = books[4];
+        Book book = books[bookNum];
 
         // convert book.Authors, which is a list, into a string with ", <br>" in between each author
         // string.Join() is a very useful method
@@ -206,12 +218,27 @@ class SimpleHTTPServer
     private string _rootDirectory;
     private HttpListener _listener;
     private int _port;
+    private int _numRequests = 0;
     private bool _done = false;
+    private Dictionary<string, int> pathsRequested = new Dictionary<string, int>();
 
     public int Port
     {
         get { return _port; }
-        private set { }
+        private set { _port = value; }
+    }
+
+    //TODO: 2-b: add a command line feature to query the total number of requests
+    public int NumRequests
+    {
+        get { return _numRequests; }
+        private set { _numRequests = value; }
+    }
+
+    // TODO: 2-c
+    public Dictionary<string, int> PathsRequested
+    {
+        get { return pathsRequested; }  
     }
 
     /// <summary>
@@ -258,6 +285,8 @@ class SimpleHTTPServer
             try
             {
                 HttpListenerContext context = _listener.GetContext();
+                //TODO: 2-b
+                NumRequests += 1;
                 Process(context);
             }
             catch (Exception ex)
@@ -275,6 +304,18 @@ class SimpleHTTPServer
     private void Process(HttpListenerContext context)
     {
         string filename = context.Request.Url.AbsolutePath;
+        // TODO: 2-c: add a command line feature to query the number of times each URL has been requested
+        // keep track of how many times each path was requested
+        // include the leading slash in the path
+        pathsRequested[filename] = pathsRequested.GetValueOrDefault(filename, 0) + 1;
+        /*
+        if (pathsRequested. ContainsKey(filename))
+            pathsRequested(filename) += 1;
+        else
+            pathsRequested.Add(filename, 1);
+        */
+        
+        // remove leading slash
         filename = filename.Substring(1);
         Console.WriteLine($"{filename} is the path");
 
