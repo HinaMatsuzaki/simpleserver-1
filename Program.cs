@@ -6,6 +6,19 @@ static void TestJSON() {
         PropertyNameCaseInsensitive = true
     };
 
+    string text = File.ReadAllText("config.json");
+    var config = JsonSerializer.Deserialize<Config>(text, options);
+
+    Console.WriteLine($"MimeMappings: {config.MimeTypes[".html"]}");
+    Console.WriteLine($"IndexFiles: {config.IndexFiles[0]}");
+}
+
+static void TestJSON2() {
+    var options = new JsonSerializerOptions
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     string text = File.ReadAllText(@"json/books.json");
     var books = JsonSerializer.Deserialize<List<Book>>(text, options);
 
@@ -16,7 +29,7 @@ static void TestJSON() {
 
 // TODO: 2-a: add a command line feature to give a better error message for unknown comman line options
 static void TestServer() {
-    SimpleHTTPServer server = new SimpleHTTPServer("files", 8080);
+    SimpleHTTPServer server = new SimpleHTTPServer("files", 8080, "config.json");
     string helpMessage = @"You can use the following commands:
         help - display this help message    
         stop - stop the server

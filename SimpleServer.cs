@@ -135,83 +135,11 @@ class SimpleHTTPServer
     // list of default index files
     // if the client requests a directory (e.g. http://localhost:8080/), 
     // we will look for one of these files
-    private readonly string[] _indexFiles = { 
-        "index.html", 
-        "index.htm", 
-        "default.html", 
-        "default.htm" 
-    };
+    private string[] _indexFiles;
     
     // map extensions to MIME types
     // TODO: put this into a configuration file
-    private static IDictionary<string, string> _mimeTypeMappings = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase) {
-        #region extension to MIME type list
-        {".asf", "video/x-ms-asf"},
-        {".asx", "video/x-ms-asf"},
-        {".avi", "video/x-msvideo"},
-        {".bin", "application/octet-stream"},
-        {".cco", "application/x-cocoa"},
-        {".crt", "application/x-x509-ca-cert"},
-        {".css", "text/css"},
-        {".deb", "application/octet-stream"},
-        {".der", "application/x-x509-ca-cert"},
-        {".dll", "application/octet-stream"},
-        {".dmg", "application/octet-stream"},
-        {".ear", "application/java-archive"},
-        {".eot", "application/octet-stream"},
-        {".exe", "application/octet-stream"},
-        {".flv", "video/x-flv"},
-        {".gif", "image/gif"},
-        {".hqx", "application/mac-binhex40"},
-        {".htc", "text/x-component"},
-        {".htm", "text/html"},
-        {".html", "text/html"},
-        {".ico", "image/x-icon"},
-        {".img", "application/octet-stream"},
-        {".iso", "application/octet-stream"},
-        {".jar", "application/java-archive"},
-        {".jardiff", "application/x-java-archive-diff"},
-        {".jng", "image/x-jng"},
-        {".jnlp", "application/x-java-jnlp-file"},
-        {".jpeg", "image/jpeg"},
-        {".jpg", "image/jpeg"},
-        {".js", "application/x-javascript"},
-        {".mml", "text/mathml"},
-        {".mng", "video/x-mng"},
-        {".mov", "video/quicktime"},
-        {".mp3", "audio/mpeg"},
-        {".mpeg", "video/mpeg"},
-        {".mpg", "video/mpeg"},
-        {".msi", "application/octet-stream"},
-        {".msm", "application/octet-stream"},
-        {".msp", "application/octet-stream"},
-        {".pdb", "application/x-pilot"},
-        {".pdf", "application/pdf"},
-        {".pem", "application/x-x509-ca-cert"},
-        {".pl", "application/x-perl"},
-        {".pm", "application/x-perl"},
-        {".png", "image/png"},
-        {".prc", "application/x-pilot"},
-        {".ra", "audio/x-realaudio"},
-        {".rar", "application/x-rar-compressed"},
-        {".rpm", "application/x-redhat-package-manager"},
-        {".rss", "text/xml"},
-        {".run", "application/x-makeself"},
-        {".sea", "application/x-sea"},
-        {".shtml", "text/html"},
-        {".sit", "application/x-stuffit"},
-        {".swf", "application/x-shockwave-flash"},
-        {".tcl", "application/x-tcl"},
-        {".tk", "application/x-tcl"},
-        {".txt", "text/plain"},
-        {".war", "application/java-archive"},
-        {".wbmp", "image/vnd.wap.wbmp"},
-        {".wmv", "video/x-ms-wmv"},
-        {".xml", "text/xml"},
-        {".xpi", "application/x-xpinstall"},
-        {".zip", "application/zip"},
-        #endregion
-    };
+    private IDictionary<string, string> _mimeTypeMappings;
 
     // instance variables
     private Thread _serverThread;
@@ -246,23 +174,23 @@ class SimpleHTTPServer
     /// </summary>
     /// <param name="path">Directory path to serve.</param>
     /// <param name="port">Port of the server.</param>
-    public SimpleHTTPServer(string path, int port)
+    public SimpleHTTPServer(string path, int port, string configFilename)
     {
-        this.Initialize(path, port);
+        this.Initialize(path, port, configFilename);
     }
 
     /// <summary>
     /// Construct server with any open port.
     /// </summary>
     /// <param name="path">Directory path to serve.</param>
-    public SimpleHTTPServer(string path)
+    public SimpleHTTPServer(string path, string configFilename)
     {
         //get an empty port
         TcpListener l = new TcpListener(IPAddress.Loopback, 0);
         l.Start();
         int port = ((IPEndPoint)l.LocalEndpoint).Port;
         l.Stop();
-        this.Initialize(path, port);
+        this.Initialize(path, port, configFilename);
     }
 
     /// <summary>
@@ -387,10 +315,24 @@ class SimpleHTTPServer
     /// </summary>
     /// <param name="path">the path of the root directory to serve files</param>
     /// <param name="port">the port to listen for connections</param>
-    private void Initialize(string path, int port)
+    /// <param name="configFilename">the name of the JSON configuration file</param>
+    private void Initialize(string path, int port, string configFilename)
     {
         this._rootDirectory = path;
         this._port = port;
+
+        // read config file
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        string text = File.ReadAllText(configFilename);
+        var config = JsonSerializer.Deserialize<Config>(text, options);
+        // assign from the config file
+        _mimeTypeMappings = config.MimeTypes;
+        _indexFiles = config.IndexFiles.ToArray();
+
         _serverThread = new Thread(this.Listen);
         _serverThread.Start();
     }
