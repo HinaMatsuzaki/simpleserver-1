@@ -35,6 +35,7 @@ static void TestServer() {
         stop - stop the server
         numreqs - display the number of requests
         paths - display the number of times each path was requested
+        404reqs - display the number of times each 404 path was requested
 ";
     Console.WriteLine($"Server started!\n{helpMessage}");
 
@@ -59,6 +60,14 @@ static void TestServer() {
         else if (command.Equals("paths"))
         {
             foreach (var path in server.PathsRequested)
+            {
+                Console.WriteLine($"{path.Key}: {path.Value}");
+            }
+        }
+        // TODO: 3-b
+        else if (command.Equals("404reqs"))
+        {
+            foreach (var path in server.WrongPathsRequested)
             {
                 Console.WriteLine($"{path.Key}: {path.Value}");
             }

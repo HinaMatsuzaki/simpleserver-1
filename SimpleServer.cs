@@ -16,6 +16,53 @@ using System.Web;
 using System.Text.Json;
 
 
+// TODO: 3-d
+class ResponseHelper
+{
+    public static void SendOkResponse(HttpListenerContext context, string responseData)
+    {
+        SendResponse(context, HttpStatusCode.OK, "text/html", responseData);
+    }
+
+    public static void SendErrorResponse(HttpListenerContext context, HttpStatusCode statusCode)
+    {
+        string pageNotFound = @"
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>404 - Page Not Found</title>
+        </head>
+        <body>
+            <h1>404 - Page Not Found</h1>
+            <p>Sorry, the page you are looking for could not be found</p>
+        </body>
+        </html>";
+
+        // set the context type in html format
+        context.Response.ContentType = "text/html";
+        // convert html content into a byte array
+        byte[] buffer = Encoding.UTF8.GetBytes(pageNotFound);
+        // write the byte array to the output stream
+        context.Response.OutputStream.Write(buffer, 0, buffer.Length);
+
+        // Set the provided status code (e.g., HttpStatusCode.NotFound)
+        context.Response.StatusCode = (int)statusCode;
+
+        context.Response.OutputStream.Close();
+    }
+
+    private static void SendResponse(HttpListenerContext context, HttpStatusCode statusCode, string contentType, string responseData)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(responseData);
+        context.Response.ContentType = contentType;
+        context.Response.ContentLength64 = bytes.Length;
+        context.Response.StatusCode = (int)statusCode;
+        context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+        context.Response.OutputStream.Flush();
+        context.Response.OutputStream.Close();
+    }
+}
+
 /// <summary>
 /// Interface for simple servlets.
 /// 
@@ -45,6 +92,177 @@ class BookHandler : IServlet {
     }
 
     public void ProcessRequest(HttpListenerContext context) {
+        // TODO: 2-e: show books 1 to N
+        if (!context.Request.QueryString.AllKeys.Contains("cmd")){
+            // if the cliend does not specify a command, we do not know what to do
+            // so we return a 400 Bad Request
+            // TODO: improve the error message
+            context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+            context.Response.OutputStream.Close();
+            return;
+        }
+
+        string cmd = context.Request.QueryString["cmd"];
+
+        if (cmd.Equals("list"))
+        {
+            // list books s to e from the JSON file
+            // TODO: handle errors (e or s not specified, not a number, s bigger than e etc.)
+            // TODO: 3-c
+            string author = context.Request.QueryString["a"];
+            string title = context.Request.QueryString["t"];
+            
+            //List<Book> sublist = books.GetRange(start, end - start + 1);
+
+            List<Book> filteredList = books;
+
+            if (!string.IsNullOrEmpty(author))
+            {
+                // Filter by exact or partial author's name.
+                filteredList = filteredList.Where(book => book.Authors.Any(a => a.Contains(author, StringComparison.OrdinalIgnoreCase))).ToList();
+            }
+
+            if (!string.IsNullOrEmpty(title))
+            {
+                // Filter by exact or partial title.
+                filteredList = filteredList.Where(book => book.Title.Contains(title, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            // TODO: 4: Feature 1: Sort books by author's name or title
+            if (context.Request.QueryString.AllKeys.Contains("sort"))
+            {
+                string sortType = context.Request.QueryString["sort"];
+                // Sort by author's name
+                if (sortType.Equals("a", StringComparison.OrdinalIgnoreCase))
+                {
+                    filteredList = filteredList.OrderBy(book => string.Join(", ", book.Authors)).ToList();
+                }
+                // Sort by title
+                else if (sortType.Equals("t", StringComparison.OrdinalIgnoreCase))
+                {
+                    filteredList = filteredList.OrderBy(book => book.Title).ToList();
+                }
+            }
+
+            // TODO: 4: Feature 2: Remove books with empty cells
+            if (context.Request.QueryString.AllKeys.Contains("empty") &&
+                context.Request.QueryString["empty"].ToLower() == "true")
+            {
+                filteredList = filteredList.Where(book => !string.IsNullOrEmpty(book.Title) && book.Authors != null && book.Authors.Count > 0 &&
+                    !string.IsNullOrEmpty(book.ShortDescription) && !string.IsNullOrEmpty(book.ThumbnailUrl)
+                ).ToList();
+            }
+
+            // If s and e parameters are provided, apply the start and end limits
+            if (context.Request.QueryString.AllKeys.Contains("s") && context.Request.QueryString.AllKeys.Contains("e"))
+            {
+                int start = Int32.Parse(context.Request.QueryString["s"]);
+                int end = Int32.Parse(context.Request.QueryString["e"]);
+                filteredList = filteredList.Skip(start).Take(end - start + 1).ToList();
+            }
+
+            string response = @"
+            <table border=1>
+            <tr>
+                <th>Title</th>
+                <th>Author</th>
+                <th>Short Description</th>
+                <th>Thumbnail</th>
+            </tr>";
+
+            /*
+            foreach (Book book in sublist){
+                string authors = String.Join(",<br> ", book.Authors);
+                response += $@"
+                <tr>
+                    <td>{book.Title}</td>
+                    <td>{authors}</td>
+                    <td>{book.ShortDescription}</td>
+                    <td><img src='{book.ThumbnailUrl}'/></td>
+                </tr>";
+            }
+            */
+
+            foreach (Book book in filteredList)
+            {
+                string authors = string.Join(",<br> ", book.Authors);
+                response += $@"
+                <tr>
+                    <td>{book.Title}</td>
+                    <td>{authors}</td>
+                    <td>{book.ShortDescription}</td>
+                    <td><img src='{book.ThumbnailUrl}'/></td>
+                </tr>";
+            }
+
+            response += "</table>";
+
+            // TODO: 3-d
+            ResponseHelper.SendOkResponse(context, response);
+
+            /*
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(response);
+            // write HTTP response to the output stream
+            // all of the context.response stuff is setting the headers for the HTTP response
+            context.Response.ContentType = "text/html";
+            context.Response.ContentLength64 = bytes.Length;
+            context.Response.AddHeader("Date", DateTime.Now.ToString("r"));
+            context.Response.AddHeader("Last-Modified", DateTime.Now.ToString("r"));
+            context.Response.StatusCode = (int)HttpStatusCode.OK;
+            context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+            context.Response.OutputStream.Flush();
+            context.Response.OutputStream.Close();
+            */
+        }
+        else if (cmd.Equals("random"))
+        {
+            // return a random book from JSON file
+            Random rand = new Random();
+            int index = rand.Next(books.Count);
+            Book book = books[index];
+            string authors = String.Join(",<br> ", book.Authors);
+            string response = $@"
+            <table border=1>
+            <tr>
+                <th>Title</th>
+                <th>Author</th>
+                <th>Short Description</th>
+                <th>Long Description</th>
+            </tr>
+            <tr>
+                <td>{book.Title}</td>
+                <td>{authors}</td>
+                <td>{book.ShortDescription}</td>
+                <td>{book.LongDescription}</td>
+            </tr>
+            </table>
+            ";
+
+            // TODO: 3-d
+            ResponseHelper.SendOkResponse(context, response);
+
+            /*
+            // write HTTP response to the output stream
+            // all of the context.response stuff is setting the headers for the HTTP response
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(response);
+            context.Response.ContentType = "text/html";
+            context.Response.ContentLength64 = bytes.Length;
+            context.Response.AddHeader("Date", DateTime.Now.ToString("r"));
+            context.Response.AddHeader("Last-Modified", DateTime.Now.ToString("r"));
+            context.Response.StatusCode = (int)HttpStatusCode.OK;
+            context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+            context.Response.OutputStream.Flush();
+            context.Response.OutputStream.Close();
+            */
+        }
+        else
+        {
+            // TODO: 3-d
+            // TODO: handle unknown command
+            ResponseHelper.SendErrorResponse(context, HttpStatusCode.BadRequest);
+        }
+
+        /*
         // TODO: 2-d: show book number N
         int bookNum = 0;
         if (context.Request.QueryString.AllKeys.Contains("n"))
@@ -59,39 +277,15 @@ class BookHandler : IServlet {
         // string.Join() is a very useful method
         string delimiter = ",<br> ";
         string authors = string.Join(delimiter, book.Authors);
+        */
 
         // build the HTML response
         // @ means a multiline string (Java doesn't have this)
         // $ means string interpolation (Java doesn't have this either)
-        string response = $@"
-        <table border=1>
-        <tr>
-            <th>Title</th>
-            <th>Author</th>
-            <th>Short Description</th>
-            <th>Long Description</th>
-        </tr>
-        <tr>
-            <td>{book.Title}</td>
-            <td>{authors}</td>
-            <td>{book.ShortDescription}</td>
-            <td>{book.LongDescription}</td>
-        </tr>
-        </table>
-        ";
-       
-        // write HTTP response to the output stream
-        // all of the context.response stuff is setting the headers for the HTTP response
-        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(response);
-        context.Response.ContentType = "text/html";
-        context.Response.ContentLength64 = bytes.Length;
-        context.Response.AddHeader("Date", DateTime.Now.ToString("r"));
-        context.Response.AddHeader("Last-Modified", DateTime.Now.ToString("r"));
-        context.Response.StatusCode = (int)HttpStatusCode.OK;
-        context.Response.OutputStream.Write(bytes, 0, bytes.Length);
-        context.Response.OutputStream.Flush();
     }
 }
+
+
 /// <summary>
 /// FooHandler: Servlet that returns a simple HTML page.
 /// </summary>
@@ -121,7 +315,6 @@ class FooHandler : IServlet {
     }
 }
 
-
 class SimpleHTTPServer
 {
     // bind servlets to a path
@@ -149,6 +342,7 @@ class SimpleHTTPServer
     private int _numRequests = 0;
     private bool _done = false;
     private Dictionary<string, int> pathsRequested = new Dictionary<string, int>();
+    private Dictionary<string, int> wrongPathsRequested = new Dictionary<string, int>();
 
     public int Port
     {
@@ -167,6 +361,12 @@ class SimpleHTTPServer
     public Dictionary<string, int> PathsRequested
     {
         get { return pathsRequested; }  
+    }
+
+    // TODO: 3-b
+    public Dictionary<string, int> WrongPathsRequested
+    {
+        get { return wrongPathsRequested; }  
     }
 
     /// <summary>
@@ -242,7 +442,7 @@ class SimpleHTTPServer
         else
             pathsRequested.Add(filename, 1);
         */
-        
+
         // remove leading slash
         filename = filename.Substring(1);
         Console.WriteLine($"{filename} is the path");
@@ -293,20 +493,46 @@ class SimpleHTTPServer
                 
                 context.Response.StatusCode = (int)HttpStatusCode.OK;
                 context.Response.OutputStream.Flush();
+                context.Response.OutputStream.Close();
             }
             catch (Exception ex)
             {
                 context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
             }
-
         }
         else
         {
+            // TODO: 3-b
+            string wrongFilename = context.Request.Url.AbsolutePath;
+            wrongPathsRequested[wrongFilename] = wrongPathsRequested.GetValueOrDefault(wrongFilename, 0) + 1;
             // This sends a 404 if the file doesn't exist or cannot be read
-            // TODO: customize the 404 page
+            // TODO: 3-a: customize the 404 page
             context.Response.StatusCode = (int)HttpStatusCode.NotFound;
+            
+            // TODO: 3-d
+            /*
+            string pageNotFound = @"
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>404 - Page Not Found</title>
+            </head>
+            <body>
+                <h1>404 - Page Not Found</h1>
+                <p>Sorry, the page you are looking for could not be found</p>
+            </body>
+            </html>";
+    
+            // set the context type in html format
+            context.Response.ContentType = "text/html";
+            // convert html content into a byte array
+            byte[] buffer = Encoding.UTF8.GetBytes(pageNotFound);
+            // write the byte array to the output stream
+            context.Response.OutputStream.Write(buffer, 0, buffer.Length);
+            */
+
+            ResponseHelper.SendErrorResponse(context, HttpStatusCode.NotFound);
         }
-        
         context.Response.OutputStream.Close();
     }
 
@@ -336,6 +562,4 @@ class SimpleHTTPServer
         _serverThread = new Thread(this.Listen);
         _serverThread.Start();
     }
-
-
 }
