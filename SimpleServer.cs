@@ -100,7 +100,7 @@ class BookHandler : IServlet {
             context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
             context.Response.OutputStream.Close();
             return;
-        }
+        } 
 
         string cmd = context.Request.QueryString["cmd"];
 
@@ -254,6 +254,49 @@ class BookHandler : IServlet {
             context.Response.OutputStream.Flush();
             context.Response.OutputStream.Close();
             */
+        }
+        // TODO: improved 2-d
+        else if (cmd.Equals("get"))
+        {
+            if (!context.Request.QueryString.AllKeys.Contains("n"))
+            {
+                ResponseHelper.SendErrorResponse(context, HttpStatusCode.BadRequest);
+                return;
+            }
+
+            int n;
+            if (!int.TryParse(context.Request.QueryString["n"], out n))
+            {
+                ResponseHelper.SendErrorResponse(context, HttpStatusCode.BadRequest);
+                return;
+            }
+
+            if (n < 0 || n >= books.Count)
+            {
+                ResponseHelper.SendErrorResponse(context, HttpStatusCode.NotFound);
+                return;
+            }
+
+            Book book = books[n];
+            string authors = string.Join(",<br> ", book.Authors);
+            string response = $@"
+                <table border=1>
+                <tr>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Short Description</th>
+                    <th>Long Description</th>
+                </tr>
+                <tr>
+                    <td>{book.Title}</td>
+                    <td>{authors}</td>
+                    <td>{book.ShortDescription}</td>
+                    <td><img src='{book.ThumbnailUrl}'/></td>
+                </tr>
+                </table>
+            ";
+
+            ResponseHelper.SendOkResponse(context, response);
         }
         else
         {
